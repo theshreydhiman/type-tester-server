@@ -1,0 +1,35 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { sequelize } from './models';
+import authRouter from './routes/auth';
+import resultsRouter from './routes/results';
+
+const app = express();
+const PORT = Number(process.env.PORT) || 5001;
+
+// Middleware
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+}));
+app.use(express.json());
+
+// Routes
+app.use('/api/auth', authRouter);
+app.use('/api/results', resultsRouter);
+
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+sequelize.sync().then(() => {
+  app.listen(PORT, () => {
+    console.log(`\n  TypeTester API running on port :- ${PORT}`);
+    console.log(`  Health: /api/health\n`);
+  });
+}).catch((err: unknown) => {
+  console.error('Failed to connect to database:', err);
+  process.exit(1);
+});
