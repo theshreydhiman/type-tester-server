@@ -19,6 +19,19 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/results', resultsRouter);
 
+// Root route
+app.get('/', (_req, res) => {
+  res.json({ 
+    message: 'TypeTester API', 
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      results: '/api/results'
+    }
+  });
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
