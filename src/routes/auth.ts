@@ -32,19 +32,19 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const existingEmail = await User.findOne({ where: { email } });
+    const existingEmail = User.findOne({ where: { email } });
     if (existingEmail) {
       res.status(409).json({ message: 'Email already registered' });
       return;
     }
-    const existingUsername = await User.findOne({ where: { username } });
+    const existingUsername = User.findOne({ where: { username } });
     if (existingUsername) {
       res.status(409).json({ message: 'Username already taken' });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ email, username, passwordHash });
+    const user = User.create({ email, username, passwordHash });
 
     const token = signToken(user.id);
     res.status(201).json({
@@ -67,7 +67,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const user = await User.findOne({ where: { email } });
+    const user = User.findOne({ where: { email } });
     if (!user || !user.passwordHash) {
       res.status(401).json({ message: 'Invalid email or password' });
       return;
@@ -91,9 +91,9 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/auth/me
-router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/me', authenticate, (req: AuthRequest, res: Response): void => {
   try {
-    const user = await User.findByPk(req.userId!, {
+    const user = User.findByPk(req.userId!, {
       attributes: ['id', 'email', 'username', 'createdAt'],
     });
     if (!user) {

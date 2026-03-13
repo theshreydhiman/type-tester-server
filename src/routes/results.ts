@@ -5,7 +5,7 @@ import { authenticate, optionalAuth, AuthRequest } from '../middleware/authMiddl
 const router = Router();
 
 // POST /api/results — save a test result (auth optional, saved to user if logged in)
-router.post('/', optionalAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', optionalAuth, (req: AuthRequest, res: Response): void => {
   const {
     wpm, rawWpm, accuracy, consistency,
     charsCorrect, charsWrong, duration,
@@ -18,7 +18,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response): Promise<
   }
 
   try {
-    const result = await TestResult.create({
+    const result = TestResult.create({
       userId: req.userId ?? null,
       wpm: Number(wpm),
       rawWpm: Number(rawWpm || wpm),
@@ -38,12 +38,12 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response): Promise<
 });
 
 // GET /api/results/me — get authenticated user's results
-router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/me', authenticate, (req: AuthRequest, res: Response): void => {
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const sort = req.query.sort === 'wpm' ? 'wpm' : 'createdAt';
 
   try {
-    const results = await TestResult.findAll({
+    const results = TestResult.findAll({
       where: { userId: req.userId! },
       order: [[sort, 'DESC']],
       limit,
@@ -56,9 +56,9 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
 });
 
 // GET /api/results/stats — get aggregate stats for authenticated user
-router.get('/stats', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/stats', authenticate, (req: AuthRequest, res: Response): void => {
   try {
-    const results = await TestResult.findAll({
+    const results = TestResult.findAll({
       where: { userId: req.userId! },
       order: [['createdAt', 'DESC']],
     });

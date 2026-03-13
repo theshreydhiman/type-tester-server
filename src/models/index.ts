@@ -1,52 +1,115 @@
-import { Sequelize, Model, DataTypes, Optional } from 'sequelize';
-
+import initSqlJs, { Database } from 'sql.js';
+import fs from 'fs';
 import path from 'path';
 
-export const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: path.join(__dirname, '..', '..', 'database.sqlite'),
-  logging: false,
-});
+const DB_PATH = path.join(__dirname, '..', '..', 'database.sqlite');
+
+let db: Database;
+
+export async function initDb(): Promise<void> {
+  const SQL = await initSqlJs();
+
+  if (fs.existsSync(DB_PATH)) {
+    const buffer = fs.readFileSync(DB_PATH);
+    db = new SQL.Database(buffer);
+  } else {
+    db = new SQL.Database();
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS User (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      username TEXT NOT NULL UNIQUE,
+      passwordHash TEXT,
+      createdAt TEXT DEFAULT (datetime('now')),
+      updatedAt TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS TestResult (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
+      wpm REAL NOT NULL,
+      rawWpm REAL NOT NULL,
+      accuracy REAL NOT NULL,
+      consistency REAL NOT NULL,
+      charsCorrect INTEGER NOT NULL,
+      charsWrong INTEGER NOT NULL,
+      duration INTEGER NOT NULL,
+      charErrors TEXT NOT NULL,
+      wpmTimeline TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES User(id) ON DELETE SET NULL
+    )
+  `);
+
+  save();
+}
+
+function save(): void {
+  const data = db.export();
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
 
 // ---- User ----
 
-interface UserAttributes {
+export interface UserRow {
   id: number;
   email: string;
   username: string;
   passwordHash: string | null;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface UserCreationAttributes
-  extends Optional<UserAttributes, 'id' | 'passwordHash' | 'createdAt' | 'updatedAt'> {}
+export const User = {
+  findOne(opts: { where: Record<string, unknown> }): UserRow | null {
+    const keys = Object.keys(opts.where);
+    const clause = keys.map(k => `${k} = :${k}`).join(' AND ');
+    const params: Record<string, unknown> = {};
+    for (const k of keys) params[`:${k}`] = opts.where[k];
 
-export class User
-  extends Model<UserAttributes, UserCreationAttributes>
-  implements UserAttributes
-{
-  declare id: number;
-  declare email: string;
-  declare username: string;
-  declare passwordHash: string | null;
-  declare readonly createdAt: Date;
-  declare readonly updatedAt: Date;
-}
-
-User.init(
-  {
-    id:           { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    email:        { type: DataTypes.STRING(191), allowNull: false, unique: true },
-    username:     { type: DataTypes.STRING(20),  allowNull: false, unique: true },
-    passwordHash: { type: DataTypes.STRING(255), allowNull: true },
+    const stmt = db.prepare(`SELECT * FROM User WHERE ${clause} LIMIT 1`);
+    stmt.bind(params);
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as unknown as UserRow;
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return null;
   },
-  { sequelize, tableName: 'User', timestamps: true },
-);
+
+  findByPk(id: number, opts?: { attributes?: string[] }): UserRow | null {
+    const cols = opts?.attributes?.join(', ') || '*';
+    const stmt = db.prepare(`SELECT ${cols} FROM User WHERE id = :id`);
+    stmt.bind({ ':id': id });
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as unknown as UserRow;
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return null;
+  },
+
+  create(data: { email: string; username: string; passwordHash: string }): UserRow {
+    const now = new Date().toISOString();
+    db.run(
+      `INSERT INTO User (email, username, passwordHash, createdAt, updatedAt) VALUES (:email, :username, :passwordHash, :createdAt, :updatedAt)`,
+      { ':email': data.email, ':username': data.username, ':passwordHash': data.passwordHash, ':createdAt': now, ':updatedAt': now },
+    );
+    const id = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0] as number;
+    save();
+    return { id, email: data.email, username: data.username, passwordHash: data.passwordHash, createdAt: now, updatedAt: now };
+  },
+};
 
 // ---- TestResult ----
 
-interface TestResultAttributes {
+export interface TestResultRow {
   id: number;
   userId: number | null;
   wpm: number;
@@ -58,48 +121,69 @@ interface TestResultAttributes {
   duration: number;
   charErrors: object;
   wpmTimeline: object;
-  createdAt?: Date;
+  createdAt: string;
 }
 
-interface TestResultCreationAttributes
-  extends Optional<TestResultAttributes, 'id' | 'createdAt'> {}
-
-export class TestResult
-  extends Model<TestResultAttributes, TestResultCreationAttributes>
-  implements TestResultAttributes
-{
-  declare id: number;
-  declare userId: number | null;
-  declare wpm: number;
-  declare rawWpm: number;
-  declare accuracy: number;
-  declare consistency: number;
-  declare charsCorrect: number;
-  declare charsWrong: number;
-  declare duration: number;
-  declare charErrors: object;
-  declare wpmTimeline: object;
-  declare readonly createdAt: Date;
+function parseResultRow(row: Record<string, unknown>): TestResultRow {
+  return {
+    ...row,
+    charErrors: JSON.parse(row.charErrors as string),
+    wpmTimeline: JSON.parse(row.wpmTimeline as string),
+  } as TestResultRow;
 }
 
-TestResult.init(
-  {
-    id:           { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    userId:       { type: DataTypes.INTEGER, allowNull: true },
-    wpm:          { type: DataTypes.FLOAT,   allowNull: false },
-    rawWpm:       { type: DataTypes.FLOAT,   allowNull: false },
-    accuracy:     { type: DataTypes.FLOAT,   allowNull: false },
-    consistency:  { type: DataTypes.FLOAT,   allowNull: false },
-    charsCorrect: { type: DataTypes.INTEGER, allowNull: false },
-    charsWrong:   { type: DataTypes.INTEGER, allowNull: false },
-    duration:     { type: DataTypes.INTEGER, allowNull: false },
-    charErrors:   { type: DataTypes.JSON,    allowNull: false },
-    wpmTimeline:  { type: DataTypes.JSON,    allowNull: false },
+export const TestResult = {
+  create(data: {
+    userId: number | null;
+    wpm: number;
+    rawWpm: number;
+    accuracy: number;
+    consistency: number;
+    charsCorrect: number;
+    charsWrong: number;
+    duration: number;
+    charErrors: object;
+    wpmTimeline: object;
+  }): TestResultRow {
+    const now = new Date().toISOString();
+    db.run(
+      `INSERT INTO TestResult (userId, wpm, rawWpm, accuracy, consistency, charsCorrect, charsWrong, duration, charErrors, wpmTimeline, createdAt)
+       VALUES (:userId, :wpm, :rawWpm, :accuracy, :consistency, :charsCorrect, :charsWrong, :duration, :charErrors, :wpmTimeline, :createdAt)`,
+      {
+        ':userId': data.userId,
+        ':wpm': data.wpm,
+        ':rawWpm': data.rawWpm,
+        ':accuracy': data.accuracy,
+        ':consistency': data.consistency,
+        ':charsCorrect': data.charsCorrect,
+        ':charsWrong': data.charsWrong,
+        ':duration': data.duration,
+        ':charErrors': JSON.stringify(data.charErrors),
+        ':wpmTimeline': JSON.stringify(data.wpmTimeline),
+        ':createdAt': now,
+      },
+    );
+    const id = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0] as number;
+    save();
+    return { id, ...data, createdAt: now };
   },
-  { sequelize, tableName: 'TestResult', timestamps: true, updatedAt: false },
-);
 
-// ---- Associations ----
+  findAll(opts: { where: Record<string, unknown>; order?: [string, string][]; limit?: number }): TestResultRow[] {
+    const keys = Object.keys(opts.where);
+    const clause = keys.map(k => `${k} = :${k}`).join(' AND ');
+    const params: Record<string, unknown> = {};
+    for (const k of keys) params[`:${k}`] = opts.where[k];
 
-User.hasMany(TestResult, { foreignKey: 'userId', onDelete: 'SET NULL' });
-TestResult.belongsTo(User, { foreignKey: 'userId' });
+    const orderClause = opts.order?.map(([col, dir]) => `${col} ${dir}`).join(', ') || 'createdAt DESC';
+    const limitClause = opts.limit ? `LIMIT ${opts.limit}` : '';
+
+    const results: TestResultRow[] = [];
+    const stmt = db.prepare(`SELECT * FROM TestResult WHERE ${clause} ORDER BY ${orderClause} ${limitClause}`);
+    stmt.bind(params);
+    while (stmt.step()) {
+      results.push(parseResultRow(stmt.getAsObject() as Record<string, unknown>));
+    }
+    stmt.free();
+    return results;
+  },
+};
