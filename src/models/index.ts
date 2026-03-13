@@ -1,7 +1,10 @@
 import { Sequelize, Model, DataTypes, Optional } from 'sequelize';
 
-export const sequelize = new Sequelize(process.env.DATABASE_URL!, {
-  dialect: 'mysql',
+import path from 'path';
+
+export const sequelize = new Sequelize({
+  dialect: 'sqlite',
+  storage: path.join(__dirname, '..', '..', 'database.sqlite'),
   logging: false,
 });
 
