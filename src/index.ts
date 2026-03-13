@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { sequelize } from './models';
+import { initDb } from './models';
 import authRouter from './routes/auth';
 import resultsRouter from './routes/results';
 
@@ -62,7 +62,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-sequelize.sync().then(() => {
+initDb().then(() => {
   app.listen(PORT, () => {
     console.log(`\n  TypeTester API running on port :- ${PORT}`);
     console.log(`  Health: /api/health\n`);
