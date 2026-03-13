@@ -18,7 +18,7 @@ const corsOptions = {
       'http://localhost:5173',
       'http://localhost:3001',
     ].filter(Boolean);
-    
+
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -46,8 +46,8 @@ app.use('/api/results', resultsRouter);
 
 // Root route
 app.get('/', (_req, res) => {
-  res.json({ 
-    message: 'TypeTester API', 
+  res.json({
+    message: 'TypeTester API',
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
