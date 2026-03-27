@@ -49,7 +49,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const token = signToken(user.id);
     res.status(201).json({
       token,
-      user: { id: user.id, email: user.email, username: user.username },
+      user: { id: user.id, email: user.email, username: user.username, abusiveConsent: !!user.abusiveConsent },
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -82,7 +82,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const token = signToken(user.id);
     res.json({
       token,
-      user: { id: user.id, email: user.email, username: user.username },
+      user: { id: user.id, email: user.email, username: user.username, abusiveConsent: !!user.abusiveConsent },
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -93,16 +93,33 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 // GET /api/auth/me
 router.get('/me', authenticate, (req: AuthRequest, res: Response): void => {
   try {
-    const user = User.findByPk(req.userId!, {
-      attributes: ['id', 'email', 'username', 'createdAt'],
-    });
+    const user = User.findByPk(req.userId!);
     if (!user) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
-    res.json({ user });
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        abusiveConsent: !!user.abusiveConsent,
+        createdAt: user.createdAt,
+      },
+    });
   } catch (err) {
     console.error('Me error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/auth/abusive-consent
+router.post('/abusive-consent', authenticate, (req: AuthRequest, res: Response): void => {
+  try {
+    User.updateConsent(req.userId!, true);
+    res.json({ abusiveConsent: true });
+  } catch (err) {
+    console.error('Consent error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });

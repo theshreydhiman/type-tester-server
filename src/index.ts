@@ -47,7 +47,7 @@ app.use('/api/results', resultsRouter);
 // Root route
 app.get('/', (_req, res) => {
   res.json({
-    message: 'TypeTester API',
+    message: 'KeyLab API',
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
@@ -64,7 +64,7 @@ app.get('/api/health', (_req, res) => {
 
 initDb().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n  TypeTester API running on port :- ${PORT}`);
+    console.log(`\n  KeyLab API running on port :- ${PORT}`);
     console.log(`  Health: /api/health\n`);
   });
 }).catch((err: unknown) => {
