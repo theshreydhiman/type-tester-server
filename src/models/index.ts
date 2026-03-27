@@ -22,10 +22,20 @@ export async function initDb(): Promise<void> {
       email TEXT NOT NULL UNIQUE,
       username TEXT NOT NULL UNIQUE,
       passwordHash TEXT,
+      abusiveConsent INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT DEFAULT (datetime('now')),
       updatedAt TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // Migration: add abusiveConsent column if missing (existing databases)
+  try {
+    const cols = db.exec('PRAGMA table_info(User)');
+    const hasColumn = cols[0]?.values.some((row) => row[1] === 'abusiveConsent');
+    if (!hasColumn) {
+      db.run('ALTER TABLE User ADD COLUMN abusiveConsent INTEGER NOT NULL DEFAULT 0');
+    }
+  } catch { /* column already exists */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS TestResult (
@@ -60,6 +70,7 @@ export interface UserRow {
   email: string;
   username: string;
   passwordHash: string | null;
+  abusiveConsent: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,7 +114,15 @@ export const User = {
     );
     const id = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0] as number;
     save();
-    return { id, email: data.email, username: data.username, passwordHash: data.passwordHash, createdAt: now, updatedAt: now };
+    return { id, email: data.email, username: data.username, passwordHash: data.passwordHash, abusiveConsent: 0, createdAt: now, updatedAt: now };
+  },
+
+  updateConsent(userId: number, consent: boolean): void {
+    db.run(
+      `UPDATE User SET abusiveConsent = :consent, updatedAt = :updatedAt WHERE id = :id`,
+      { ':consent': consent ? 1 : 0, ':updatedAt': new Date().toISOString(), ':id': userId },
+    );
+    save();
   },
 };
 
